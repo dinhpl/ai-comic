@@ -6,6 +6,7 @@ import { ReadingHistoryList } from "@/components/home/reading-history-list";
 import { ComicLibrary } from "@/components/home/comic-library";
 import { useReadingHistory } from "@/hooks/use-reading-history";
 import { Toaster } from "sonner";
+import { UserButton } from "@/components/auth/user-button";
 
 export default function HomePage() {
   const { history, removeFromHistory, clearHistory } = useReadingHistory();
@@ -25,11 +26,18 @@ export default function HomePage() {
         <HeaderBar />
 
         <main className="max-w-lg mx-auto px-4 pb-8">
+          {/* User Section */}
+          <div className="pt-6 mb-2">
+            <UserButton />
+          </div>
+
           {/* Hero Section */}
-          <div className="pt-6 pb-4">
-            <h2 className="text-xl font-bold tracking-tight">Xin chào! 👋</h2>
+          <div className="pt-2 pb-4">
+            <h2 className="text-xl font-bold tracking-tight">
+              Thư viện của bạn 👋
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Chọn truyện bên dưới để bắt đầu đọc
+              Khám phá và tiếp tục hành trình đọc
             </p>
           </div>
 
