@@ -5,20 +5,19 @@ import { useSearchParams } from "next/navigation";
 import { ReaderHeader } from "@/components/reader/reader-header";
 import { ReaderFooter } from "@/components/reader/reader-footer";
 import { ChapterSection } from "@/components/reader/chapter-section";
+import { ChapterSelector } from "@/components/reader/chapter-selector";
 import type { FailedImageInfo } from "@/components/reader/comic-image";
 import { useScrollDirection } from "@/hooks/use-scroll-direction";
 import { useReadingHistory } from "@/hooks/use-reading-history";
-import { extractSlugFromUrl } from "@/lib/crawler";
-import type { ChapterState, CrawlResponse } from "@/lib/types";
+import type { ChapterState } from "@/lib/types";
 import { IconLoader2 } from "@tabler/icons-react";
 
 // ============================================================================
 // Configuration
 // ============================================================================
-const PREFETCH_AHEAD = 3; // How many chapters to prefetch ahead
-const CRAWL_DELAY = 600; // Delay between crawl requests (ms)
-const VIRTUALIZE_DISTANCE = 5; // Chapters further than this from current → virtualize
-const IMAGE_PRELOAD_BATCH = 5; // How many images to preload concurrently
+const PREFETCH_AHEAD = 3;
+const VIRTUALIZE_DISTANCE = 5;
+const IMAGE_PRELOAD_BATCH = 5;
 
 // ============================================================================
 // Image Preloader — fetches images in background so they're browser-cached
@@ -33,11 +32,10 @@ function preloadImages(images: { src: string }[]): void {
 
     const el = new Image();
     el.onload = loadNext;
-    el.onerror = loadNext; // skip failed ones, ComicImage will retry
+    el.onerror = loadNext;
     el.src = `/api/proxy-image?url=${encodeURIComponent(img.src)}`;
   }
 
-  // Start IMAGE_PRELOAD_BATCH concurrent downloads
   const batchSize = Math.min(IMAGE_PRELOAD_BATCH, images.length);
   for (let i = 0; i < batchSize; i++) {
     loadNext();
@@ -46,7 +44,11 @@ function preloadImages(images: { src: string }[]): void {
 
 function ReaderContent() {
   const searchParams = useSearchParams();
-  const initialUrl = searchParams.get("url") || "";
+  // New params: slug + start chapter number
+  const slug = searchParams.get("slug") || "";
+  const startChapter = parseInt(searchParams.get("chapter") || "1", 10);
+  // Fallback: legacy URL mode (for backward compat)
+  const legacyUrl = searchParams.get("url") || "";
   const maxChapters = parseInt(searchParams.get("max") || "9999", 10);
 
   const { isVisible, toggleVisible } = useScrollDirection();
@@ -55,44 +57,41 @@ function ReaderContent() {
   // State
   const [chapters, setChapters] = useState<ChapterState[]>([]);
   const [comicTitle, setComicTitle] = useState("Đang tải...");
-  const [currentVisibleChapter, setCurrentVisibleChapter] = useState(1);
+  const [comicSlug, setComicSlug] = useState(slug);
+  const [totalChaptersDB, setTotalChaptersDB] = useState(maxChapters);
+  const [currentVisibleChapter, setCurrentVisibleChapter] =
+    useState(startChapter);
   const [progress, setProgress] = useState(0);
   const [allChaptersLoaded, setAllChaptersLoaded] = useState(false);
   const [failedImages, setFailedImages] = useState<FailedImageInfo[]>([]);
+  const [showChapterSelector, setShowChapterSelector] = useState(false);
 
-  // Saved chapter heights for virtualization placeholders
   const [chapterHeights, setChapterHeights] = useState<Map<number, number>>(
     new Map(),
   );
 
   // Refs
-  const crawlQueueRef = useRef<Set<number>>(new Set());
+  const fetchQueueRef = useRef<Set<number>>(new Set());
   const chaptersRef = useRef<ChapterState[]>([]);
-  const comicTitleRef = useRef("Đang tải...");
   const preloadedChaptersRef = useRef<Set<number>>(new Set());
-  const chapterUrlMapRef = useRef<Map<number, string>>(new Map());
 
-  // Keep refs in sync with state
   useEffect(() => {
     chaptersRef.current = chapters;
   }, [chapters]);
-  useEffect(() => {
-    comicTitleRef.current = comicTitle;
-  }, [comicTitle]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Crawl a single chapter
+  // Fetch a single chapter from DB API
   // ──────────────────────────────────────────────────────────────────────────
-  const crawlChapter = useCallback(
-    async (url: string, chapterNum: number): Promise<ChapterState | null> => {
+  const fetchChapterFromDB = useCallback(
+    async (chapterNum: number): Promise<ChapterState | null> => {
+      const targetSlug = comicSlug;
+      if (!targetSlug) return null;
+
       try {
-        const response = await fetch("/api/crawl", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-
-        const data: CrawlResponse = await response.json();
+        const response = await fetch(
+          `/api/chapters?slug=${encodeURIComponent(targetSlug)}&chapter=${chapterNum}`,
+        );
+        const data = await response.json();
 
         if (!data.success || !data.data) {
           return {
@@ -101,17 +100,9 @@ function ReaderContent() {
             images: [],
             loaded: true,
             loading: false,
-            error: data.error || "Không thể tải chương",
+            error: data.error || "Chương chưa được crawl",
             nextChapterUrl: null,
           };
-        }
-
-        // Save next chapter URL mapping
-        if (data.data.nextChapterUrl) {
-          chapterUrlMapRef.current.set(
-            data.data.chapterNumber + 1,
-            data.data.nextChapterUrl,
-          );
         }
 
         return {
@@ -121,7 +112,7 @@ function ReaderContent() {
           loaded: true,
           loading: false,
           error: null,
-          nextChapterUrl: data.data.nextChapterUrl,
+          nextChapterUrl: data.data.hasNextChapter ? "has-next" : null,
         };
       } catch (err) {
         return {
@@ -135,28 +126,26 @@ function ReaderContent() {
         };
       }
     },
-    [],
+    [comicSlug],
   );
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Fetch a chapter and add to state
+  // Fetch and add chapter to state
   // ──────────────────────────────────────────────────────────────────────────
   const fetchAndAddChapter = useCallback(
-    async (chapterNum: number, url: string) => {
-      // Prevent duplicate fetches
-      if (crawlQueueRef.current.has(chapterNum)) return;
-      crawlQueueRef.current.add(chapterNum);
+    async (chapterNum: number) => {
+      if (fetchQueueRef.current.has(chapterNum)) return;
+      fetchQueueRef.current.add(chapterNum);
 
-      // Skip if already loaded successfully
       const existing = chaptersRef.current.find(
         (c) => c.chapterNumber === chapterNum,
       );
       if (existing && existing.loaded && !existing.error) {
-        crawlQueueRef.current.delete(chapterNum);
+        fetchQueueRef.current.delete(chapterNum);
         return;
       }
 
-      // Add loading placeholder (insert in sorted order)
+      // Add loading placeholder
       setChapters((prev) => {
         const exists = prev.find((c) => c.chapterNumber === chapterNum);
         if (exists) {
@@ -180,17 +169,14 @@ function ReaderContent() {
         );
       });
 
-      // Rate limiting delay
-      await new Promise((r) => setTimeout(r, CRAWL_DELAY));
-
-      const result = await crawlChapter(url, chapterNum);
+      const result = await fetchChapterFromDB(chapterNum);
 
       if (result) {
         setChapters((prev) =>
           prev.map((ch) => (ch.chapterNumber === chapterNum ? result : ch)),
         );
 
-        // ⚡ Preload images in background so they're browser-cached
+        // Preload images in background
         if (
           result.images.length > 0 &&
           !result.error &&
@@ -200,27 +186,33 @@ function ReaderContent() {
           preloadImages(result.images);
         }
 
-        // Check if this is the last chapter
+        // Mark end if no next chapter
         if (!result.nextChapterUrl && result.loaded && !result.error) {
-          // Could be the last chapter — but we don't set allChaptersLoaded here
-          // because the URL pattern might still work for subsequent chapters
+          setAllChaptersLoaded(true);
         }
 
         // Save history
         addToHistory({
-          title: comicTitleRef.current,
-          slug: extractSlugFromUrl(initialUrl),
+          title: comicTitle,
+          slug: comicSlug,
           coverUrl: result.images[0]?.src || "",
           lastChapter: result.chapterNumber,
-          lastChapterUrl: url,
-          sourceUrl: initialUrl,
-          maxChapters,
+          lastChapterUrl: `/read?slug=${comicSlug}&chapter=${result.chapterNumber}`,
+          sourceUrl: `/read?slug=${comicSlug}&chapter=${startChapter}`,
+          maxChapters: totalChaptersDB,
         });
       }
 
-      crawlQueueRef.current.delete(chapterNum);
+      fetchQueueRef.current.delete(chapterNum);
     },
-    [crawlChapter, addToHistory, initialUrl, maxChapters],
+    [
+      fetchChapterFromDB,
+      addToHistory,
+      comicTitle,
+      comicSlug,
+      startChapter,
+      totalChaptersDB,
+    ],
   );
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -231,12 +223,11 @@ function ReaderContent() {
       for (let i = 1; i <= PREFETCH_AHEAD; i++) {
         const target = fromChapter + i;
 
-        if (target > maxChapters) {
+        if (target > totalChaptersDB) {
           if (i === 1) setAllChaptersLoaded(true);
           break;
         }
 
-        // Skip if already loaded/loading
         const existing = chaptersRef.current.find(
           (c) => c.chapterNumber === target,
         );
@@ -247,34 +238,32 @@ function ReaderContent() {
         ) {
           continue;
         }
-        if (crawlQueueRef.current.has(target)) continue;
+        if (fetchQueueRef.current.has(target)) continue;
 
-        // Get URL
-        const url =
-          chapterUrlMapRef.current.get(target) ||
-          `${initialUrl.replace(/chuong-\d+.*$/, "")}chuong-${target}`;
-
-        fetchAndAddChapter(target, url);
+        fetchAndAddChapter(target);
       }
     },
-    [maxChapters, initialUrl, fetchAndAddChapter],
+    [totalChaptersDB, fetchAndAddChapter],
   );
 
   // ──────────────────────────────────────────────────────────────────────────
   // Load initial chapter
   // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!initialUrl || chapters.length > 0) return;
+    const effectiveSlug =
+      slug || (legacyUrl ? extractSlugFromLegacyUrl(legacyUrl) : "");
+    if (!effectiveSlug || chapters.length > 0) return;
 
-    const match = initialUrl.match(/chuong-(\d+)/i);
-    const startNum = match ? parseInt(match[1], 10) : 1;
+    setComicSlug(effectiveSlug);
 
-    chapterUrlMapRef.current.set(startNum, initialUrl);
+    const effectiveStart = slug
+      ? startChapter
+      : extractChapterFromLegacyUrl(legacyUrl);
 
     setChapters([
       {
-        chapterNumber: startNum,
-        chapterTitle: `Chương ${startNum}`,
+        chapterNumber: effectiveStart,
+        chapterTitle: `Chương ${effectiveStart}`,
         images: [],
         loaded: false,
         loading: true,
@@ -284,29 +273,50 @@ function ReaderContent() {
     ]);
 
     (async () => {
-      const result = await crawlChapter(initialUrl, startNum);
-      if (result) {
-        const slug = extractSlugFromUrl(initialUrl);
-        const title = slug
-          .replace(/-/g, " ")
-          .replace(/\b\w/g, (c) => c.toUpperCase());
+      // First get comic info
+      const infoRes = await fetch(
+        `/api/chapters?slug=${encodeURIComponent(effectiveSlug)}&chapter=${effectiveStart}`,
+      );
+      const infoData = await infoRes.json();
+
+      if (infoData.success && infoData.data) {
+        const title =
+          infoData.data.comic?.title || effectiveSlug.replace(/-/g, " ");
         setComicTitle(title);
-        comicTitleRef.current = title;
+        setTotalChaptersDB(infoData.data.comic?.totalChapters || maxChapters);
+
+        const result: ChapterState = {
+          chapterNumber: infoData.data.chapterNumber,
+          chapterTitle: infoData.data.chapterTitle,
+          images: infoData.data.images,
+          loaded: true,
+          loading: false,
+          error: null,
+          nextChapterUrl: infoData.data.hasNextChapter ? "has-next" : null,
+        };
+
         setChapters([result]);
-        setCurrentVisibleChapter(startNum);
+        setCurrentVisibleChapter(effectiveStart);
+
+        // Preload first chapter images
+        if (result.images.length > 0) {
+          preloadedChaptersRef.current.add(effectiveStart);
+          preloadImages(result.images);
+        }
 
         addToHistory({
           title,
-          slug,
-          coverUrl: result.images[0]?.src || "",
-          lastChapter: startNum,
-          lastChapterUrl: initialUrl,
-          sourceUrl: initialUrl,
-          maxChapters,
+          slug: effectiveSlug,
+          coverUrl:
+            infoData.data.comic?.coverUrl || result.images[0]?.src || "",
+          lastChapter: effectiveStart,
+          lastChapterUrl: `/read?slug=${effectiveSlug}&chapter=${effectiveStart}`,
+          sourceUrl: `/read?slug=${effectiveSlug}&chapter=${effectiveStart}`,
+          maxChapters: infoData.data.comic?.totalChapters || maxChapters,
         });
 
-        // Prefetch next chapters after a short delay
-        setTimeout(() => prefetchChapters(startNum), 500);
+        // Prefetch next chapters
+        setTimeout(() => prefetchChapters(effectiveStart), 300);
 
         // Scroll to chapter if reloading
         const reloadTo = sessionStorage.getItem("reload-to-chapter");
@@ -318,10 +328,22 @@ function ReaderContent() {
             if (el) el.scrollIntoView({ behavior: "instant", block: "start" });
           }, 300);
         }
+      } else {
+        setChapters([
+          {
+            chapterNumber: effectiveStart,
+            chapterTitle: `Chương ${effectiveStart}`,
+            images: [],
+            loaded: true,
+            loading: false,
+            error: infoData.error || "Truyện chưa được crawl vào database",
+            nextChapterUrl: null,
+          },
+        ]);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialUrl]);
+  }, [slug, legacyUrl]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // When current chapter changes → prefetch more
@@ -333,7 +355,7 @@ function ReaderContent() {
   }, [currentVisibleChapter, prefetchChapters, chapters.length]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Scroll tracking: progress bar + current visible chapter
+  // Scroll tracking
   // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     let ticking = false;
@@ -343,7 +365,6 @@ function ReaderContent() {
       ticking = true;
 
       requestAnimationFrame(() => {
-        // Progress
         const scrollTop = window.scrollY;
         const docHeight =
           document.documentElement.scrollHeight - window.innerHeight;
@@ -353,7 +374,6 @@ function ReaderContent() {
             : 0,
         );
 
-        // Find current visible chapter
         const chapterEls = document.querySelectorAll("[id^='chapter-']");
         let found = currentVisibleChapter;
         chapterEls.forEach((el) => {
@@ -376,7 +396,7 @@ function ReaderContent() {
   }, [currentVisibleChapter]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Height measurement callback (for virtualization placeholders)
+  // Height measurement callback
   // ──────────────────────────────────────────────────────────────────────────
   const handleHeightMeasured = useCallback(
     (chapterNumber: number, height: number) => {
@@ -390,11 +410,6 @@ function ReaderContent() {
     [],
   );
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Determine which chapters should be virtualized
-  // Simple rule: virtualize chapters more than VIRTUALIZE_DISTANCE away
-  // from current visible chapter, AND only if we have a saved height for them
-  // ──────────────────────────────────────────────────────────────────────────
   const isChapterVirtualized = useCallback(
     (chapterNumber: number): boolean => {
       const distance = Math.abs(chapterNumber - currentVisibleChapter);
@@ -409,13 +424,10 @@ function ReaderContent() {
   // ──────────────────────────────────────────────────────────────────────────
   const retryChapter = useCallback(
     (chapterNum: number) => {
-      const url =
-        chapterUrlMapRef.current.get(chapterNum) ||
-        `${initialUrl.replace(/chuong-\d+.*$/, "")}chuong-${chapterNum}`;
-      crawlQueueRef.current.delete(chapterNum);
-      fetchAndAddChapter(chapterNum, url);
+      fetchQueueRef.current.delete(chapterNum);
+      fetchAndAddChapter(chapterNum);
     },
-    [initialUrl, fetchAndAddChapter],
+    [fetchAndAddChapter],
   );
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -423,7 +435,6 @@ function ReaderContent() {
   // ──────────────────────────────────────────────────────────────────────────
   const handleImagePermanentFailure = useCallback((info: FailedImageInfo) => {
     setFailedImages((prev) => {
-      // Avoid duplicates
       if (
         prev.some(
           (f) =>
@@ -450,6 +461,43 @@ function ReaderContent() {
   }, []);
 
   const loadedCount = chapters.filter((c) => c.loaded && !c.error).length;
+  const loadedChapterNumbers = chapters
+    .filter((c) => c.loaded && !c.error)
+    .map((c) => c.chapterNumber);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Navigate to a specific chapter (from selector or prev/next buttons)
+  // ──────────────────────────────────────────────────────────────────────────
+  const navigateToChapter = useCallback(
+    (chapterNum: number) => {
+      // If chapter is already loaded, scroll to it
+      const existing = chaptersRef.current.find(
+        (c) => c.chapterNumber === chapterNum && c.loaded && !c.error,
+      );
+      if (existing) {
+        const el = document.getElementById(`chapter-${chapterNum}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          setCurrentVisibleChapter(chapterNum);
+          return;
+        }
+      }
+      // Otherwise fetch it
+      fetchAndAddChapter(chapterNum);
+      // Wait for it to render, then scroll
+      const interval = setInterval(() => {
+        const el = document.getElementById(`chapter-${chapterNum}`);
+        if (el) {
+          clearInterval(interval);
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          setCurrentVisibleChapter(chapterNum);
+        }
+      }, 200);
+      // Safety timeout
+      setTimeout(() => clearInterval(interval), 5000);
+    },
+    [fetchAndAddChapter],
+  );
 
   return (
     <div className="min-h-dvh bg-background" onClick={toggleVisible}>
@@ -474,7 +522,6 @@ function ReaderContent() {
           />
         ))}
 
-        {/* All done message */}
         {allChaptersLoaded && loadedCount > 0 && (
           <div className="py-12 text-center">
             <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -492,12 +539,36 @@ function ReaderContent() {
 
       <ReaderFooter
         currentChapter={currentVisibleChapter}
-        maxChapters={maxChapters}
+        maxChapters={totalChaptersDB}
         failedImages={failedImages}
         progress={progress}
+        onOpenChapterSelector={() => setShowChapterSelector(true)}
+        onNavigateChapter={navigateToChapter}
+      />
+
+      <ChapterSelector
+        slug={comicSlug}
+        currentChapter={currentVisibleChapter}
+        isOpen={showChapterSelector}
+        onClose={() => setShowChapterSelector(false)}
+        onSelectChapter={navigateToChapter}
+        loadedChapters={loadedChapterNumbers}
       />
     </div>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Helpers for legacy URL mode
+// ──────────────────────────────────────────────────────────────────────────
+function extractSlugFromLegacyUrl(url: string): string {
+  const match = url.match(/truyen-tranh\/([^/]+)/);
+  return match ? match[1] : "";
+}
+
+function extractChapterFromLegacyUrl(url: string): number {
+  const match = url.match(/chuong-(\d+)/i);
+  return match ? parseInt(match[1], 10) : 1;
 }
 
 export default function ReadPage() {

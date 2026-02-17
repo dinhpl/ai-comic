@@ -1,9 +1,9 @@
 "use client";
 
 import { HeaderBar } from "@/components/home/header-bar";
-import { UrlInputForm } from "@/components/home/url-input-form";
 import { ContinueReadingCard } from "@/components/home/continue-reading-card";
 import { ReadingHistoryList } from "@/components/home/reading-history-list";
+import { ComicLibrary } from "@/components/home/comic-library";
 import { useReadingHistory } from "@/hooks/use-reading-history";
 import { Toaster } from "sonner";
 
@@ -29,21 +29,29 @@ export default function HomePage() {
           <div className="pt-6 pb-4">
             <h2 className="text-xl font-bold tracking-tight">Xin chào! 👋</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Dán link truyện tranh vào bên dưới để bắt đầu đọc
+              Chọn truyện bên dưới để bắt đầu đọc
             </p>
-          </div>
-
-          {/* URL Input Form */}
-          <div className="bg-card rounded-2xl border border-border/50 p-4 shadow-sm">
-            <UrlInputForm />
           </div>
 
           {/* Continue Reading Card */}
           {lastRead && (
-            <div className="mt-5 animate-fade-in-up">
+            <div className="mb-5 animate-fade-in-up">
               <ContinueReadingCard item={lastRead} />
             </div>
           )}
+
+          {/* Comic Library from Database */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                📚 Thư viện truyện
+              </h3>
+              <span className="text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
+                từ database
+              </span>
+            </div>
+            <ComicLibrary />
+          </div>
 
           {/* Reading History */}
           <div className="mt-6">
@@ -57,7 +65,11 @@ export default function HomePage() {
           {/* Footer Hint */}
           <div className="mt-8 text-center">
             <p className="text-[10px] text-muted-foreground/40">
-              Hỗ trợ URL từ nhattruyenqq.com và các trang tương tự
+              Dùng{" "}
+              <code className="px-1 py-0.5 bg-muted/50 rounded">
+                pnpm crawl
+              </code>{" "}
+              để thêm truyện mới
             </p>
           </div>
         </main>

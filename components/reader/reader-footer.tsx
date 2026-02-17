@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { IconRefresh, IconAlertTriangle, IconX } from "@tabler/icons-react";
+import {
+  IconRefresh,
+  IconAlertTriangle,
+  IconX,
+  IconChevronLeft,
+  IconChevronRight,
+  IconList,
+} from "@tabler/icons-react";
 import type { FailedImageInfo } from "./comic-image";
 
 interface ReaderFooterProps {
@@ -9,6 +16,8 @@ interface ReaderFooterProps {
   maxChapters: number;
   failedImages: FailedImageInfo[];
   progress: number;
+  onOpenChapterSelector: () => void;
+  onNavigateChapter: (chapterNumber: number) => void;
 }
 
 export function ReaderFooter({
@@ -16,14 +25,18 @@ export function ReaderFooter({
   maxChapters,
   failedImages,
   progress,
+  onOpenChapterSelector,
+  onNavigateChapter,
 }: ReaderFooterProps) {
   const [showDialog, setShowDialog] = useState(false);
 
   const handleReload = () => {
-    // Save current chapter to sessionStorage so we can scroll back after reload
     sessionStorage.setItem("reload-to-chapter", String(currentChapter));
     window.location.reload();
   };
+
+  const hasPrev = currentChapter > 1;
+  const hasNext = maxChapters > 9000 || currentChapter < maxChapters;
 
   return (
     <>
@@ -36,41 +49,67 @@ export function ReaderFooter({
       </div>
 
       {/* Fixed footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-md border-t border-border/50 safe-area-bottom">
-        <div className="max-w-3xl mx-auto flex items-center justify-between px-4 py-2">
-          {/* Chapter info */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-foreground">
-              Ch. {currentChapter}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              / {maxChapters > 9000 ? "∞" : maxChapters}
-            </span>
+      <footer className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-t border-border/50 safe-area-bottom">
+        <div className="max-w-3xl mx-auto px-3 py-2">
+          {/* Main controls row */}
+          <div className="flex items-center gap-2">
+            {/* Prev chapter */}
+            <button
+              onClick={() => hasPrev && onNavigateChapter(currentChapter - 1)}
+              disabled={!hasPrev}
+              className="w-9 h-9 rounded-xl flex items-center justify-center bg-muted/50 hover:bg-muted text-foreground disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+              aria-label="Chương trước"
+            >
+              <IconChevronLeft size={18} />
+            </button>
+
+            {/* Chapter selector trigger (center) */}
+            <button
+              onClick={onOpenChapterSelector}
+              className="flex-1 flex items-center justify-center gap-2 h-9 rounded-xl bg-muted/50 hover:bg-muted active:scale-[0.98] transition-all"
+            >
+              <IconList size={14} className="text-muted-foreground" />
+              <span className="text-xs font-semibold text-foreground">
+                Ch. {currentChapter}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                / {maxChapters > 9000 ? "∞" : maxChapters}
+              </span>
+            </button>
+
+            {/* Next chapter */}
+            <button
+              onClick={() => hasNext && onNavigateChapter(currentChapter + 1)}
+              disabled={!hasNext}
+              className="w-9 h-9 rounded-xl flex items-center justify-center bg-muted/50 hover:bg-muted text-foreground disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+              aria-label="Chương tiếp"
+            >
+              <IconChevronRight size={18} />
+            </button>
+
+            {/* Reload */}
+            <button
+              onClick={handleReload}
+              className="w-9 h-9 rounded-xl flex items-center justify-center bg-muted/50 hover:bg-muted text-foreground active:scale-95 transition-all"
+              aria-label="Reload"
+            >
+              <IconRefresh size={16} />
+            </button>
+
+            {/* Failed images badge */}
+            {failedImages.length > 0 && (
+              <button
+                onClick={() => setShowDialog(true)}
+                className="w-9 h-9 rounded-xl flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 active:scale-95 transition-all relative"
+                aria-label="Ảnh lỗi"
+              >
+                <IconAlertTriangle size={16} />
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center">
+                  {failedImages.length}
+                </span>
+              </button>
+            )}
           </div>
-
-          {/* Reload button */}
-          <button
-            onClick={handleReload}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 hover:bg-muted text-foreground text-xs font-medium active:scale-95 transition-all"
-            aria-label="Reload trang"
-          >
-            <IconRefresh size={14} />
-            Reload
-          </button>
-
-          {/* Failed images counter */}
-          <button
-            onClick={() => failedImages.length > 0 && setShowDialog(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              failedImages.length > 0
-                ? "bg-destructive/10 text-destructive hover:bg-destructive/20 active:scale-95 cursor-pointer"
-                : "bg-muted/30 text-muted-foreground cursor-default"
-            }`}
-            disabled={failedImages.length === 0}
-          >
-            <IconAlertTriangle size={14} />
-            {failedImages.length > 0 ? `${failedImages.length} lỗi` : "0 lỗi"}
-          </button>
         </div>
       </footer>
 
@@ -80,15 +119,12 @@ export function ReaderFooter({
           className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center"
           onClick={() => setShowDialog(false)}
         >
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
-          {/* Dialog */}
           <div
             className="relative w-full max-w-md mx-4 mb-4 sm:mb-0 bg-background rounded-2xl shadow-2xl border border-border/50 overflow-hidden animate-fade-in-up"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
@@ -111,7 +147,6 @@ export function ReaderFooter({
               </button>
             </div>
 
-            {/* List */}
             <div className="max-h-[50vh] overflow-y-auto">
               {failedImages.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -144,7 +179,6 @@ export function ReaderFooter({
               )}
             </div>
 
-            {/* Footer */}
             <div className="px-4 py-3 border-t border-border/50 bg-muted/20">
               <button
                 onClick={() => setShowDialog(false)}
