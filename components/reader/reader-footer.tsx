@@ -8,6 +8,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconList,
+  IconSettings,
 } from "@tabler/icons-react";
 import type { FailedImageInfo } from "./comic-image";
 
@@ -18,6 +19,7 @@ interface ReaderFooterProps {
   progress: number;
   onOpenChapterSelector: () => void;
   onNavigateChapter: (chapterNumber: number) => void;
+  onOpenSettings: () => void;
 }
 
 export function ReaderFooter({
@@ -27,6 +29,7 @@ export function ReaderFooter({
   progress,
   onOpenChapterSelector,
   onNavigateChapter,
+  onOpenSettings,
 }: ReaderFooterProps) {
   const [showDialog, setShowDialog] = useState(false);
 
@@ -85,6 +88,15 @@ export function ReaderFooter({
               aria-label="Chương tiếp"
             >
               <IconChevronRight size={18} />
+            </button>
+
+            {/* Settings */}
+            <button
+              onClick={onOpenSettings}
+              className="w-9 h-9 rounded-xl flex items-center justify-center bg-muted/50 hover:bg-muted text-foreground active:scale-95 transition-all"
+              aria-label="Cài đặt"
+            >
+              <IconSettings size={18} />
             </button>
 
             {/* Reload */}

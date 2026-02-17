@@ -14,6 +14,7 @@ interface ChapterSectionProps {
   onHeightMeasured?: (chapterNumber: number, height: number) => void;
   onImagePermanentFailure?: (info: FailedImageInfo) => void;
   onImageFailureResolved?: (info: FailedImageInfo) => void;
+  maxRetries?: number;
 }
 
 export function ChapterSection({
@@ -25,6 +26,7 @@ export function ChapterSection({
   onHeightMeasured,
   onImagePermanentFailure,
   onImageFailureResolved,
+  maxRetries,
 }: ChapterSectionProps) {
   const measureRef = (el: HTMLDivElement | null) => {
     if (el && onHeightMeasured && chapter.loaded && chapter.images.length > 0) {
@@ -117,6 +119,7 @@ export function ChapterSection({
             }
             index={image.index}
             chapterNumber={chapter.chapterNumber}
+            maxRetries={maxRetries}
             onPermanentFailure={onImagePermanentFailure}
             onFailureResolved={onImageFailureResolved}
           />

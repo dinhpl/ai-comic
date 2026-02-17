@@ -11,6 +11,8 @@ import { useScrollDirection } from "@/hooks/use-scroll-direction";
 import { useReadingHistory } from "@/hooks/use-reading-history";
 import type { ChapterState } from "@/lib/types";
 import { IconLoader2 } from "@tabler/icons-react";
+import { useReaderSettings } from "@/hooks/use-reader-settings";
+import { ReaderSettings } from "@/components/reader/reader-settings-dialog";
 
 // ============================================================================
 // Configuration
@@ -53,6 +55,7 @@ function ReaderContent() {
 
   const { isVisible, toggleVisible } = useScrollDirection();
   const { addToHistory } = useReadingHistory();
+  const { settings, updateSettings } = useReaderSettings();
 
   // State
   const [chapters, setChapters] = useState<ChapterState[]>([]);
@@ -65,6 +68,7 @@ function ReaderContent() {
   const [allChaptersLoaded, setAllChaptersLoaded] = useState(false);
   const [failedImages, setFailedImages] = useState<FailedImageInfo[]>([]);
   const [showChapterSelector, setShowChapterSelector] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const [chapterHeights, setChapterHeights] = useState<Map<number, number>>(
     new Map(),
@@ -220,7 +224,8 @@ function ReaderContent() {
   // ──────────────────────────────────────────────────────────────────────────
   const prefetchChapters = useCallback(
     (fromChapter: number) => {
-      for (let i = 1; i <= PREFETCH_AHEAD; i++) {
+      const prefetchCount = settings.prefetchAhead;
+      for (let i = 1; i <= prefetchCount; i++) {
         const target = fromChapter + i;
 
         if (target > totalChaptersDB) {
@@ -243,7 +248,7 @@ function ReaderContent() {
         fetchAndAddChapter(target);
       }
     },
-    [totalChaptersDB, fetchAndAddChapter],
+    [totalChaptersDB, fetchAndAddChapter, settings.prefetchAhead],
   );
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -566,6 +571,7 @@ function ReaderContent() {
             onHeightMeasured={handleHeightMeasured}
             onImagePermanentFailure={handleImagePermanentFailure}
             onImageFailureResolved={handleImageFailureResolved}
+            maxRetries={settings.maxRetries}
           />
         ))}
 
@@ -591,6 +597,7 @@ function ReaderContent() {
         progress={progress}
         onOpenChapterSelector={() => setShowChapterSelector(true)}
         onNavigateChapter={navigateToChapter}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       <ChapterSelector
@@ -600,6 +607,13 @@ function ReaderContent() {
         onClose={() => setShowChapterSelector(false)}
         onSelectChapter={navigateToChapter}
         loadedChapters={loadedChapterNumbers}
+      />
+
+      <ReaderSettings
+        settings={settings}
+        updateSettings={updateSettings}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );

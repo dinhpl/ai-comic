@@ -14,11 +14,12 @@ interface ComicImageProps {
   alt: string;
   index: number;
   chapterNumber: number;
+  maxRetries?: number;
   onPermanentFailure?: (info: FailedImageInfo) => void;
   onFailureResolved?: (info: FailedImageInfo) => void;
 }
 
-const MAX_RETRIES = 5;
+const DEFAULT_MAX_RETRIES = 5;
 const RETRY_DELAYS = [1000, 2000, 3000, 5000, 8000];
 
 export function ComicImage({
@@ -26,6 +27,7 @@ export function ComicImage({
   alt,
   index,
   chapterNumber,
+  maxRetries = DEFAULT_MAX_RETRIES,
   onPermanentFailure,
   onFailureResolved,
 }: ComicImageProps) {
@@ -42,7 +44,7 @@ export function ComicImage({
     (retryCount > 0 ? `&_r=${retryCount}` : "");
 
   const scheduleRetry = useCallback(() => {
-    if (retryCount >= MAX_RETRIES) {
+    if (retryCount >= maxRetries) {
       // Report permanent failure
       if (!reportedFailureRef.current && onPermanentFailure) {
         reportedFailureRef.current = true;
@@ -90,12 +92,12 @@ export function ComicImage({
   }, []);
 
   // Permanent failure
-  if (error && retryCount >= MAX_RETRIES && !retrying) {
+  if (error && retryCount >= maxRetries && !retrying) {
     return (
       <div className="w-full flex flex-col items-center justify-center py-10 bg-muted/30 gap-2">
         <IconPhotoOff size={28} className="text-muted-foreground/40" />
         <p className="text-xs text-muted-foreground">
-          Trang {index + 1} - Không tải được sau {MAX_RETRIES} lần thử
+          Trang {index + 1} - Không tải được sau {maxRetries} lần thử
         </p>
         <button
           onClick={() => {
@@ -125,7 +127,7 @@ export function ComicImage({
       {error && retrying && (
         <div className="w-full aspect-2/3 skeleton-shimmer rounded-sm flex items-center justify-center">
           <p className="text-[10px] text-muted-foreground/60 absolute">
-            Đang thử lại ({retryCount + 1}/{MAX_RETRIES})...
+            Đang thử lại ({retryCount + 1}/{maxRetries})...
           </p>
         </div>
       )}
