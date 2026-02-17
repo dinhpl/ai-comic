@@ -13,6 +13,8 @@ import type { ChapterState } from "@/lib/types";
 import { IconLoader2 } from "@tabler/icons-react";
 import { useReaderSettings } from "@/hooks/use-reader-settings";
 import { ReaderSettings } from "@/components/reader/reader-settings-dialog";
+import { useAuth } from "@/hooks/use-auth";
+import { getSupabase } from "@/lib/supabase";
 
 // ============================================================================
 // Configuration
@@ -55,6 +57,7 @@ function ReaderContent() {
 
   const { isVisible, toggleVisible } = useScrollDirection();
   const { addToHistory } = useReadingHistory();
+  const { user } = useAuth();
   const { settings, updateSettings } = useReaderSettings();
 
   // State
@@ -397,6 +400,36 @@ function ReaderContent() {
         sourceUrl: "",
         maxChapters: totalChaptersDB,
       });
+
+      // Mark as read in individual chapters table if logged in
+      if (user) {
+        const supabase = getSupabase();
+        // We need the comic_id. We can get it from the chaptersState if it was stored or just fetch once.
+        // Actually, let's just use the comicSlug to find it or we can pass comicId from the initial layout.
+        // For now, let's find the comicId.
+        supabase
+          .from("comics")
+          .select("id")
+          .eq("slug", comicSlug)
+          .single()
+          .then(({ data: comicData }) => {
+            if (comicData) {
+              supabase
+                .from("user_read_chapters")
+                .upsert(
+                  {
+                    user_id: user.id,
+                    comic_id: comicData.id,
+                    chapter_number: currentVisibleChapter,
+                  },
+                  { onConflict: "user_id, comic_id, chapter_number" },
+                )
+                .then(() => {
+                  // done
+                });
+            }
+          });
+      }
     }
   }, [
     currentVisibleChapter,

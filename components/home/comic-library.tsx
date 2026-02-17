@@ -84,11 +84,7 @@ export function ComicLibrary() {
       {comics.map((comic) => (
         <button
           key={comic.id}
-          onClick={() =>
-            router.push(
-              `/read?slug=${comic.slug}&chapter=${comic.first_chapter}`,
-            )
-          }
+          onClick={() => router.push(`/comic/${comic.slug}`)}
           className="w-full flex items-center gap-3 p-3 bg-card hover:bg-accent/50 rounded-xl border border-border/50 transition-all duration-200 active:scale-[0.98] text-left shadow-sm hover:shadow-md"
         >
           {/* Cover thumbnail */}
