@@ -12,11 +12,18 @@ export function ContinueReadingCard({ item }: ContinueReadingCardProps) {
   const router = useRouter();
 
   const handleClick = () => {
-    const params = new URLSearchParams({
-      url: item.lastChapterUrl,
-      max: String(item.maxChapters),
-    });
-    router.push(`/read?${params.toString()}`);
+    if (item.slug) {
+      router.push(
+        `/read?slug=${encodeURIComponent(item.slug)}&chapter=${item.lastChapter}`,
+      );
+    } else {
+      // Legacy fallback
+      const params = new URLSearchParams({
+        url: item.lastChapterUrl,
+        max: String(item.maxChapters),
+      });
+      router.push(`/read?${params.toString()}`);
+    }
   };
 
   return (

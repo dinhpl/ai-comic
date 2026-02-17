@@ -355,6 +355,53 @@ function ReaderContent() {
   }, [currentVisibleChapter, prefetchChapters, chapters.length]);
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Update browser URL and history when current chapter changes
+  // ──────────────────────────────────────────────────────────────────────────
+  const prevChapterRef = useRef<number>(startChapter);
+
+  useEffect(() => {
+    if (
+      currentVisibleChapter <= 0 ||
+      currentVisibleChapter === prevChapterRef.current ||
+      !comicSlug
+    ) {
+      return;
+    }
+
+    prevChapterRef.current = currentVisibleChapter;
+
+    // Update URL without full navigation
+    const newUrl = `/read?slug=${encodeURIComponent(comicSlug)}&chapter=${currentVisibleChapter}`;
+    window.history.replaceState(
+      { ...window.history.state, chapter: currentVisibleChapter },
+      "",
+      newUrl,
+    );
+
+    // Update reading history
+    const currentChapterData = chaptersRef.current.find(
+      (c) => c.chapterNumber === currentVisibleChapter && c.loaded,
+    );
+    if (currentChapterData) {
+      addToHistory({
+        title: comicTitle,
+        slug: comicSlug,
+        coverUrl: "",
+        lastChapter: currentVisibleChapter,
+        lastChapterUrl: newUrl,
+        sourceUrl: "",
+        maxChapters: totalChaptersDB,
+      });
+    }
+  }, [
+    currentVisibleChapter,
+    comicSlug,
+    comicTitle,
+    totalChaptersDB,
+    addToHistory,
+  ]);
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Scroll tracking
   // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {

@@ -32,11 +32,17 @@ export function ReadingHistoryList({
   }
 
   const handleItemClick = (item: ReadingHistoryItem) => {
-    const params = new URLSearchParams({
-      url: item.lastChapterUrl,
-      max: String(item.maxChapters),
-    });
-    router.push(`/read?${params.toString()}`);
+    if (item.slug) {
+      router.push(
+        `/read?slug=${encodeURIComponent(item.slug)}&chapter=${item.lastChapter}`,
+      );
+    } else {
+      const params = new URLSearchParams({
+        url: item.lastChapterUrl,
+        max: String(item.maxChapters),
+      });
+      router.push(`/read?${params.toString()}`);
+    }
   };
 
   const formatTime = (timestamp: number) => {
