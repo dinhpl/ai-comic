@@ -41,8 +41,8 @@ CREATE POLICY "Users can delete own history" ON public.user_reading_history FOR 
 CREATE TABLE IF NOT EXISTS public.user_reader_settings (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-    prefetch_ahead int NOT NULL DEFAULT 3,
-    max_retries int NOT NULL DEFAULT 5,
+    prefetch_ahead int NOT NULL DEFAULT 2,
+    max_retries int NOT NULL DEFAULT 7,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
@@ -59,7 +59,7 @@ INSERT INTO public.profiles (id, email)
 VALUES (new.id, new.email);
 -- Create default settings for new user
 INSERT INTO public.user_reader_settings (user_id, prefetch_ahead, max_retries)
-VALUES (new.id, 3, 5);
+VALUES (new.id, 2, 7);
 RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -12,8 +12,8 @@ export interface ReaderSettings {
 const STORAGE_KEY = "comic-reader-settings";
 
 const DEFAULT_SETTINGS: ReaderSettings = {
-  prefetchAhead: 3,
-  maxRetries: 5,
+  prefetchAhead: 2,
+  maxRetries: 7,
 };
 
 export function useReaderSettings() {
