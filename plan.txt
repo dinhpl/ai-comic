@@ -1,0 +1,273 @@
+================================================================================
+                        📖 RENDER TRUYỆN - PLAN CHI TIẾT
+                    Trang Web Đọc Truyện Tranh Mobile First
+================================================================================
+
+🎯 MỤC TIÊU TỔNG QUAN
+──────────────────────────────────────────────────────────────────────────────────
+Xây dựng trang web đọc truyện tranh mobile-first, cho phép nhập URL từ
+nhattruyenqq.com, tự động crawl nội dung (hình ảnh chương truyện) và hiển thị
+giao diện đọc truyện mượt mà với infinite scroll tự động load chương tiếp theo.
+
+📐 Giao diện tham khảo: image_base.png (Comic Reader App UI)
+🛠  Tech Stack: Next.js 16 + Tailwind v4 + ShadcnUI + Tabler Icons
+💾 Database: localStorage (tạm thời)
+
+
+================================================================================
+PHASE 0: PHÂN TÍCH & QUY HOẠCH ✅ HOÀN THÀNH
+================================================================================
+
+0.1 ✅ Phân tích nguồn dữ liệu (nhattruyenqq.com)
+    - URL mẫu: https://nhattruyenqq.com/truyen-tranh/bat-dau-tu-cuu-dau-dieu/chuong-1
+    - Cấu trúc URL: /truyen-tranh/{slug-truyen}/chuong-{so-chuong}
+    - HTML selectors cho images: .page-chapter img, .reading-detail img, etc.
+    - Image src: data-original, data-src, src attributes
+
+0.2 ✅ Xác định scope MVP
+    - ❌ KHÔNG làm: Đăng nhập, Profile, Favorites, Author page
+    - ✅ CẦN LÀM: Nhập URL → Đọc truyện → Infinite scroll
+    - ✅ BONUS: Lịch sử đọc local, Dark mode
+
+
+================================================================================
+PHASE 1: BACKEND - API PROXY/CRAWL ✅ HOÀN THÀNH
+================================================================================
+Ngày hoàn thành: 2026-02-17
+
+1.1 ✅ API Route: /api/crawl (app/api/crawl/route.ts)
+    - POST request nhận URL chương truyện
+    - Dùng cheerio để parse HTML
+    - Trích xuất: title, chapterNumber, chapterTitle, images[], nextChapterUrl
+    - Multiple fallback selectors cho images
+    - Error handling + timeout 15s
+
+1.2 ✅ API Route: /api/proxy-image (app/api/proxy-image/route.ts)
+    - GET request với query param ?url=
+    - Proxy ảnh với Referer header phù hợp
+    - Stream response trực tiếp (ArrayBuffer)
+    - Cache-Control: max-age=86400
+    - Timeout 30s
+
+1.3 ❌ API Route: /api/comic-info (BỎ QUA - không cần cho MVP)
+
+📦 Dependencies đã cài:
+    - cheerio (HTML parser)
+    - sonner (Toast notifications)
+
+
+================================================================================
+PHASE 2: UI/UX - MOBILE FIRST ✅ HOÀN THÀNH
+================================================================================
+Ngày hoàn thành: 2026-02-17
+
+2.1 ✅ Cấu trúc routing
+    - app/page.tsx         → Trang chủ (nhập URL + lịch sử)
+    - app/read/page.tsx    → Trang đọc truyện (query: ?url=&max=)
+
+2.2 ✅ Trang chủ - Components:
+    - components/home/header-bar.tsx           (Logo + dark mode toggle)
+    - components/home/url-input-form.tsx        (Input URL + số chương + submit)
+    - components/home/continue-reading-card.tsx (Gradient card "tiếp tục đọc")
+    - components/home/reading-history-list.tsx  (Danh sách lịch sử + xóa)
+
+2.3 ✅ Trang đọc truyện - Components:
+    - components/reader/reader-header.tsx    (Auto-hide, glass effect)
+    - components/reader/reader-footer.tsx    (Chapter nav + progress bar)
+    - components/reader/chapter-section.tsx  (Wrapper 1 chương)
+    - components/reader/comic-image.tsx      (Lazy load + skeleton + retry)
+    - components/reader/chapter-loading.tsx  (Loading spinner giữa chương)
+
+2.4 ✅ Design System (globals.css)
+    - Coral/salmon warm theme
+    - Dark mode support
+    - Glass morphism (.glass)
+    - Gradient (.gradient-coral)
+    - Skeleton shimmer animation
+    - Fade-in animations
+    - Custom scrollbar
+    - Touch-friendly targets (44px min)
+
+
+================================================================================
+PHASE 3: STATE & DATA MANAGEMENT ✅ HOÀN THÀNH
+================================================================================
+Ngày hoàn thành: 2026-02-17
+
+3.1 ✅ Custom Hooks:
+    - hooks/use-chapter-crawl.ts         (API caller + loading/error)
+    - hooks/use-reading-history.ts       (localStorage CRUD, max 20 items)
+    - hooks/use-scroll-direction.ts      (Scroll up/down → toggle header)
+    - hooks/use-intersection-observer.ts (IntersectionObserver wrapper)
+
+3.2 ✅ localStorage Schema:
+    Key: "comic-reading-history"
+    Key: "theme" (dark/light)
+
+3.3 ✅ TypeScript Types (lib/types.ts):
+    - ComicImage, ChapterData, ComicInfo
+    - ChapterState, ReaderState
+    - ReadingHistoryItem
+    - CrawlRequest, CrawlResponse
+
+3.4 ✅ Crawler Module (lib/crawler.ts):
+    - parseChapterPage() - Multiple fallback selectors
+    - extractSlugFromUrl()
+    - resolveUrl()
+
+
+================================================================================
+PHASE 4: XỬ LÝ KỸ THUẬT ✅ HOÀN THÀNH
+================================================================================
+Ngày hoàn thành: 2026-02-17
+
+4.1 ✅ CORS & Hotlink Protection
+    - API proxy-image xử lý hoàn toàn
+    - Mọi ảnh đi qua /api/proxy-image?url=<encoded>
+    - Referer header tự động detect từ image URL
+
+4.2 ✅ Rate Limiting & Throttling
+    - 800ms delay giữa các request crawl chương
+    - loadingRef để prevent duplicate requests
+    - Chỉ crawl khi user scroll gần tới (IntersectionObserver rootMargin: 600px)
+
+4.3 ✅ Performance Optimization
+    - Lazy loading ảnh (loading="lazy" cho index > 2)
+    - Skeleton placeholder khi ảnh đang tải
+    - requestAnimationFrame cho scroll direction
+    - passive: true cho scroll listeners
+    - decoding="async" cho images
+
+4.4 ✅ Error Handling
+    - URL validation trước khi submit
+    - Retry button cho chương lỗi
+    - Retry button cho ảnh lỗi
+    - Error messages tiếng Việt rõ ràng
+    - Timeout cho fetch requests (15s crawl, 30s image)
+
+
+================================================================================
+PHASE 5: DARK MODE & RESPONSIVE ✅ HOÀN THÀNH
+================================================================================
+Ngày hoàn thành: 2026-02-17
+
+5.1 ✅ Dark Mode
+    - Toggle button ở header
+    - localStorage persistence
+    - System preference detection (prefers-color-scheme)
+    - Inline script ngăn FOUC (flash of unstyled content)
+    - Theme color cho browser chrome
+
+5.2 ✅ Responsive
+    - Mobile first (max-w-lg cho home, max-w-3xl cho reader)
+    - Full-width images trên mobile
+    - touch-target 44px cho buttons
+    - iOS safe area support (env(safe-area-inset-bottom))
+    - Vietnamese font subset
+
+
+================================================================================
+PHASE 6: POLISH & UX ✅ HOÀN THÀNH
+================================================================================
+Ngày hoàn thành: 2026-02-17
+
+6.1 ✅ Animations & Transitions
+    - Fade in animation cho page elements (animate-fade-in-up)
+    - Image load fade-in (opacity transition)
+    - Header/Footer slide animation (transform duration-300)
+    - Button scale on press (active:scale-[0.98])
+    - Card hover effects
+
+6.2 ⏭ Keyboard Shortcuts (SKIPPED - mobile-first)
+
+6.3 ✅ Touch Gestures
+    - Tap giữa màn hình: toggle header/footer
+
+6.4 ✅ Accessibility
+    - Semantic HTML (header, main, article, nav)
+    - aria-labels cho buttons
+    - Vietnamese lang attribute
+    - suppressHydrationWarning
+    - Proper heading hierarchy
+
+
+================================================================================
+📁 CẤU TRÚC THƯ MỤC CUỐI CÙNG
+================================================================================
+
+render-truyen/
+├── app/
+│   ├── layout.tsx                    ✅ Root layout + font + metadata
+│   ├── globals.css                   ✅ Theme + design tokens
+│   ├── page.tsx                      ✅ Home: nhập URL + lịch sử
+│   ├── read/
+│   │   └── page.tsx                  ✅ Reader: infinite scroll
+│   └── api/
+│       ├── crawl/
+│       │   └── route.ts             ✅ API crawl chương truyện
+│       └── proxy-image/
+│           └── route.ts             ✅ API proxy ảnh
+├── components/
+│   ├── ui/                          ✅ ShadcnUI components (có sẵn)
+│   ├── home/
+│   │   ├── header-bar.tsx           ✅
+│   │   ├── url-input-form.tsx       ✅
+│   │   ├── continue-reading-card.tsx ✅
+│   │   └── reading-history-list.tsx ✅
+│   └── reader/
+│       ├── reader-header.tsx        ✅
+│       ├── reader-footer.tsx        ✅
+│       ├── chapter-section.tsx      ✅
+│       ├── comic-image.tsx          ✅
+│       └── chapter-loading.tsx      ✅
+├── hooks/
+│   ├── use-chapter-crawl.ts         ✅
+│   ├── use-reading-history.ts       ✅
+│   ├── use-scroll-direction.ts      ✅
+│   └── use-intersection-observer.ts ✅
+├── lib/
+│   ├── utils.ts                     ✅ (có sẵn)
+│   ├── crawler.ts                   ✅ HTML parser
+│   └── types.ts                     ✅ TypeScript interfaces
+└── public/
+    └── ...
+
+
+================================================================================
+✅ TRẠNG THÁI: TẤT CẢ PHASE ĐÃ HOÀN THÀNH
+================================================================================
+
+Build: ✅ Compiled successfully (Next.js 16.1.4 Turbopack)
+Dev Server: ✅ Running at http://localhost:3000
+
+Tính năng đã triển khai:
+  ✅ Nhập URL chương truyện → tự động crawl & hiển thị ảnh
+  ✅ Infinite scroll LIÊN TỤC - tất cả chương trên 1 trang, chỉ cần scroll
+  ✅ Prefetch 3 chương tiếp theo trước khi user đọc tới
+  ✅ Auto-retry ảnh lỗi tối đa 5 lần (backoff: 1s, 2s, 3s, 5s, 8s)
+  ✅ Virtualization: Chapter offscreen > 10s → clear khỏi DOM (giữ height)
+  ✅ Giới hạn số chương tối đa (user nhập)
+  ✅ Lịch sử đọc lưu localStorage (max 20)
+  ✅ Tiếp tục đọc từ chương cuối
+  ✅ Dark mode (toggle + system detect + persist)
+  ✅ Mobile-first responsive design
+  ✅ Image proxy chống hotlink (Referer: nhattruyenqq.com)
+  ✅ Skeleton loading + error retry
+  ✅ Auto-hide header/footer khi scroll
+  ✅ Progress bar đọc truyện
+  ✅ Glass morphism & coral gradient theme
+
+📝 Changelog:
+  [2026-02-17 v1.0] Initial implementation - all 6 phases
+  [2026-02-17 v1.1] Fix 403 image proxy (Referer → nhattruyenqq.com)
+  [2026-02-17 v1.2] Continuous scroll + Prefetch 3 CH ahead
+                     + Auto-retry images 5x + Virtualization (10s offscreen)
+
+🔮 Tương lai (nếu cần mở rộng):
+  - Database thật (PostgreSQL/MongoDB) thay localStorage
+  - Đăng nhập / đăng ký
+  - Bookmark chapters
+  - Search truyện
+  - Offline reading (Service Worker)
+  - PWA support
+  - Keyboard shortcuts cho desktop
