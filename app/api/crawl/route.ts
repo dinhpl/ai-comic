@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate URL pattern
+    // Validate URL pattern a
     if (!url.includes("truyen-tranh") && !url.includes("chuong")) {
       return NextResponse.json(
         {
